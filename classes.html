@@ -1,0 +1,166 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Browse Classes – GymPro</title>
+  <link rel="stylesheet" href="/static/css/style.css" />
+</head>
+<body>
+
+<nav>
+  <a class="nav-brand" href="/classes.html">🏋️ GymPro</a>
+  <div class="nav-links">
+    <a href="/classes.html" class="active">Classes</a>
+    <a href="/my-bookings.html">My Bookings</a>
+    <a href="/admin-dashboard.html" class="admin-only" style="display:none">Admin</a>
+    <span id="nav-username" style="color:var(--muted);font-size:0.9rem;"></span>
+    <button class="btn-logout" onclick="logout()">Logout</button>
+  </div>
+</nav>
+
+<div class="container">
+  <div class="page-header">
+    <h1>🗓️ Fitness Classes</h1>
+  </div>
+
+  <div class="card" style="margin-bottom:1.5rem;">
+    <div class="filters">
+      <div class="form-group">
+        <label>Category</label>
+        <select id="filter-category" onchange="loadClasses()">
+          <option value="">All Categories</option>
+          <option value="Yoga">Yoga</option>
+          <option value="HIIT">HIIT</option>
+          <option value="Strength">Strength</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label>Trainer / Instructor</label>
+        <input type="text" id="filter-instructor" placeholder="Search by trainer…" oninput="debounceLoad()" />
+      </div>
+      <button class="btn btn-outline" onclick="clearFilters()">Clear</button>
+    </div>
+  </div>
+
+  <div id="alert-box"></div>
+
+  <div id="classes-container">
+    <div class="loading-center"><div class="spinner"></div></div>
+  </div>
+</div>
+
+<!-- Booking Confirm Modal -->
+<div class="modal-overlay" id="book-modal">
+  <div class="modal">
+    <div class="modal-header">
+      <h2>Reserve Spot</h2>
+      <button class="modal-close" onclick="closeModal()">×</button>
+    </div>
+    <p id="modal-class-info" style="color:var(--muted);margin-bottom:1.5rem;"></p>
+    <div id="modal-alert"></div>
+    <div style="display:flex;gap:1rem;">
+      <button class="btn btn-primary" style="flex:1" onclick="confirmBook()">Confirm Booking</button>
+      <button class="btn btn-outline" style="flex:1" onclick="closeModal()">Cancel</button>
+    </div>
+  </div>
+</div>
+
+<script src="/static/js/api.js"></script>
+<script>
+  requireAuth();
+  setNavUser();
+
+  let selectedClassId = null;
+  let debTimer;
+
+  function debounceLoad() {
+    clearTimeout(debTimer);
+    debTimer = setTimeout(loadClasses, 400);
+  }
+
+  function clearFilters() {
+    document.getElementById("filter-category").value = "";
+    document.getElementById("filter-instructor").value = "";
+    loadClasses();
+  }
+
+  async function loadClasses() {
+    const cat = document.getElementById("filter-category").value;
+    const inst = document.getElementById("filter-instructor").value;
+    let url = "/classes?";
+    if (cat) url += `category=${encodeURIComponent(cat)}&`;
+    if (inst) url += `instructor=${encodeURIComponent(inst)}`;
+
+    document.getElementById("classes-container").innerHTML =
+      '<div class="loading-center"><div class="spinner"></div></div>';
+    try {
+      const classes = await api("GET", url);
+      renderClasses(classes);
+    } catch (e) {
+      showAlert("#alert-box", e.message);
+    }
+  }
+
+  function renderClasses(classes) {
+    const container = document.getElementById("classes-container");
+    if (!classes.length) {
+      container.innerHTML = '<div class="empty-state"><div class="icon">🤷</div><p>No classes found. Try different filters.</p></div>';
+      return;
+    }
+    container.innerHTML = '<div class="class-grid">' + classes.map(c => {
+      const pct = Math.round((c.available_spots / c.capacity) * 100);
+      const full = c.available_spots === 0;
+      return `
+        <div class="class-card">
+          <div class="class-card-header">
+            <h3>${c.title}</h3>
+            ${categoryBadge(c.category)}
+          </div>
+          <div class="class-card-body">
+            <div class="class-meta">
+              <span>👤 ${c.instructor}</span>
+              <span>🕐 ${formatDate(c.schedule_time)}</span>
+              <span>💺 ${c.available_spots} / ${c.capacity} spots available</span>
+            </div>
+            <div class="spots-bar">
+              <div class="spots-fill" style="width:${pct}%; background:${full ? 'var(--danger)' : 'var(--primary)'}"></div>
+            </div>
+            <button class="btn ${full ? 'btn-danger' : 'btn-primary'}" style="width:100%;"
+              ${full ? "disabled" : `onclick="openBookModal(${c.id}, '${c.title}', '${c.instructor}')"`}>
+              ${full ? "Class Full" : "Reserve Spot"}
+            </button>
+          </div>
+        </div>`;
+    }).join("") + "</div>";
+  }
+
+  function openBookModal(id, title, instructor) {
+    selectedClassId = id;
+    document.getElementById("modal-class-info").textContent =
+      `You're about to book "${title}" with ${instructor}.`;
+    document.getElementById("modal-alert").innerHTML = "";
+    document.getElementById("book-modal").classList.add("open");
+  }
+
+  function closeModal() {
+    document.getElementById("book-modal").classList.remove("open");
+    selectedClassId = null;
+  }
+
+  async function confirmBook() {
+    if (!selectedClassId) return;
+    try {
+      await api("POST", `/bookings/${selectedClassId}`);
+      closeModal();
+      showAlert("#alert-box", "✅ Spot reserved successfully!", "success");
+      loadClasses();
+    } catch (e) {
+      showAlert("#modal-alert", e.message);
+    }
+  }
+
+  loadClasses();
+</script>
+</body>
+</html>

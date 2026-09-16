@@ -1,0 +1,113 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Booking Logs – GymPro Admin</title>
+  <link rel="stylesheet" href="/static/css/style.css" />
+</head>
+<body>
+
+<nav>
+  <a class="nav-brand" href="/admin-dashboard.html">🏋️ GymPro Admin</a>
+  <div class="nav-links">
+    <a href="/admin-dashboard.html">Dashboard</a>
+    <a href="/admin-bookings.html" class="active">Booking Logs</a>
+    <span id="nav-username" style="color:var(--muted);font-size:0.9rem;"></span>
+    <button class="btn-logout" onclick="logout()">Logout</button>
+  </div>
+</nav>
+
+<div class="container">
+  <div class="page-header">
+    <h1>📋 All Booking Logs</h1>
+  </div>
+
+  <div class="card" style="margin-bottom:1rem;">
+    <div class="filters">
+      <div class="form-group">
+        <label>Filter by Status</label>
+        <select id="filter-status" onchange="filterBookings()">
+          <option value="">All</option>
+          <option value="confirmed">Confirmed</option>
+          <option value="cancelled">Cancelled</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label>Search Member</label>
+        <input type="text" id="filter-member" placeholder="Name or email…" oninput="filterBookings()" />
+      </div>
+    </div>
+  </div>
+
+  <div id="alert-box"></div>
+
+  <div class="card">
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>#</th><th>Member</th><th>Email</th><th>Class</th>
+            <th>Category</th><th>Schedule</th><th>Booked On</th><th>Status</th>
+          </tr>
+        </thead>
+        <tbody id="bookings-tbody">
+          <tr><td colspan="8"><div class="loading-center"><div class="spinner"></div></div></td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<script src="/static/js/api.js"></script>
+<script>
+  requireAdmin();
+  setNavUser();
+
+  let allBookings = [];
+
+  async function loadBookings() {
+    try {
+      allBookings = await api("GET", "/bookings");
+      filterBookings();
+    } catch (e) {
+      showAlert("#alert-box", e.message);
+    }
+  }
+
+  function filterBookings() {
+    const status = document.getElementById("filter-status").value;
+    const member = document.getElementById("filter-member").value.toLowerCase();
+
+    let filtered = allBookings;
+    if (status) filtered = filtered.filter(b => b.status === status);
+    if (member) filtered = filtered.filter(b =>
+      b.user?.name?.toLowerCase().includes(member) ||
+      b.user?.email?.toLowerCase().includes(member)
+    );
+    renderTable(filtered);
+  }
+
+  function renderTable(bookings) {
+    const tbody = document.getElementById("bookings-tbody");
+    if (!bookings.length) {
+      tbody.innerHTML = '<tr><td colspan="8"><div class="empty-state"><div class="icon">📭</div><p>No bookings found.</p></div></td></tr>';
+      return;
+    }
+    tbody.innerHTML = bookings.map(b => `
+      <tr>
+        <td>${b.id}</td>
+        <td><strong>${b.user?.name || "—"}</strong></td>
+        <td style="color:var(--muted);font-size:0.85rem;">${b.user?.email || "—"}</td>
+        <td>${b.gym_class?.title || "—"}</td>
+        <td>${b.gym_class ? categoryBadge(b.gym_class.category) : "—"}</td>
+        <td>${b.gym_class ? formatDate(b.gym_class.schedule_time) : "—"}</td>
+        <td>${formatDate(b.booking_date)}</td>
+        <td><span class="badge badge-${b.status}">${b.status}</span></td>
+      </tr>`).join("");
+  }
+
+  loadBookings();
+</script>
+</body>
+</html>

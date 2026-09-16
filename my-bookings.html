@@ -1,0 +1,108 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>My Bookings – GymPro</title>
+  <link rel="stylesheet" href="/static/css/style.css" />
+</head>
+<body>
+
+<nav>
+  <a class="nav-brand" href="/classes.html">🏋️ GymPro</a>
+  <div class="nav-links">
+    <a href="/classes.html">Classes</a>
+    <a href="/my-bookings.html" class="active">My Bookings</a>
+    <a href="/admin-dashboard.html" class="admin-only" style="display:none">Admin</a>
+    <span id="nav-username" style="color:var(--muted);font-size:0.9rem;"></span>
+    <button class="btn-logout" onclick="logout()">Logout</button>
+  </div>
+</nav>
+
+<div class="container">
+  <div class="page-header">
+    <h1>📋 My Bookings</h1>
+    <a href="/classes.html" class="btn btn-primary">+ Browse Classes</a>
+  </div>
+
+  <div id="alert-box"></div>
+
+  <div class="card">
+    <div id="bookings-container">
+      <div class="loading-center"><div class="spinner"></div></div>
+    </div>
+  </div>
+</div>
+
+<script src="/static/js/api.js"></script>
+<script>
+  requireAuth();
+  setNavUser();
+
+  async function loadBookings() {
+    try {
+      const bookings = await api("GET", "/bookings/my");
+      renderBookings(bookings);
+    } catch (e) {
+      showAlert("#alert-box", e.message);
+    }
+  }
+
+  function renderBookings(bookings) {
+    const container = document.getElementById("bookings-container");
+    if (!bookings.length) {
+      container.innerHTML = '<div class="empty-state"><div class="icon">📭</div><p>You have no bookings yet. <a href="/classes.html" style="color:var(--primary)">Browse classes!</a></p></div>';
+      return;
+    }
+
+    container.innerHTML = `
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>#</th>
+              <th>Class</th>
+              <th>Category</th>
+              <th>Instructor</th>
+              <th>Schedule</th>
+              <th>Booked On</th>
+              <th>Status</th>
+              <th>Action</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${bookings.map(b => `
+              <tr>
+                <td>${b.id}</td>
+                <td><strong>${b.gym_class?.title || "—"}</strong></td>
+                <td>${b.gym_class ? categoryBadge(b.gym_class.category) : "—"}</td>
+                <td>${b.gym_class?.instructor || "—"}</td>
+                <td>${b.gym_class ? formatDate(b.gym_class.schedule_time) : "—"}</td>
+                <td>${formatDate(b.booking_date)}</td>
+                <td><span class="badge badge-${b.status}">${b.status}</span></td>
+                <td>
+                  ${b.status === "confirmed"
+                    ? `<button class="btn btn-danger" onclick="cancelBooking(${b.id})">Cancel</button>`
+                    : '<span style="color:var(--muted);font-size:0.85rem;">—</span>'}
+                </td>
+              </tr>`).join("")}
+          </tbody>
+        </table>
+      </div>`;
+  }
+
+  async function cancelBooking(id) {
+    if (!confirm("Cancel this booking?")) return;
+    try {
+      await api("PUT", `/bookings/${id}/cancel`);
+      showAlert("#alert-box", "Booking cancelled.", "success");
+      loadBookings();
+    } catch (e) {
+      showAlert("#alert-box", e.message);
+    }
+  }
+
+  loadBookings();
+</script>
+</body>
+</html>
